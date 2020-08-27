@@ -27,8 +27,11 @@ class Task(object):
     def assign_prod_line(self, prod_line):
         self.production_line = prod_line
 
-    def is_assigned(self):
+    def has_worker_assigned(self):
         return self.assigned
+
+    def has_prod_line_assigned(self):
+        return not (self.production_line is None)
 
     def is_started(self):
         return self.started
@@ -39,6 +42,8 @@ class Task(object):
     def assign_worker(self, worker):
         self.worker = worker
         self.assigned = True
+        self.started = True
+        self.current_status = TaskStatus.IN_PROGRESS
 
 
 class Spread(Task):

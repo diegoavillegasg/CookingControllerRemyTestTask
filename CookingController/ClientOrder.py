@@ -22,6 +22,7 @@ class ClientOrder(object):
         # a list of tasks
         self.order_tasks_list = []
         self.state = None
+        self.tasks_in_progress = 0
 
     def create_list_of_tasks(self):
         # ###################################################### #
@@ -92,6 +93,9 @@ class ClientOrder(object):
         new_task = Pack(size=self.size)
         self.order_tasks_list.append(new_task)
         print("new task created... " + str(new_task))
+
+    def get_tasks_in_progress(self):
+        return self.tasks_in_progress
 
     def set_created_state(self):
         self.state = ClientOrderState.CREATED

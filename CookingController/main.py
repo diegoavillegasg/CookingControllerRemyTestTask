@@ -9,6 +9,7 @@ from CookingController.Oven import Oven
 from CookingController.Worker import Worker
 
 CLIENT_ORDERS_LIST = []
+ORDERS_ID = []
 WORKERS_LIST = []
 PRODUCTION_LINE_DICT = {}
 
@@ -69,93 +70,104 @@ def start_pizza_maker():
     for oven in ovens_list:
         oven.print_description()
 
-    #while True:
+    iterations = 0
+    while True:
+        iterations += 1
+        print("iteration : ========================================== : ", iterations)
+        # ###################### #
+        #   LOOK FOR NEW ORDERS
+        # ###################### #
+        look_new_order()
 
-    # ###################### #
-    #   LOOK FOR NEW ORDERS
-    # ###################### #
-    look_new_order()
+        # ###################### #
+        #   MANAGE ORDERS
+        # ###################### #
+        # CREATE LIST OF DIFFS OF CURRENT ORDER QTY AND OVEN MAX CAPACITY
+        list_of_ovens = [(oven_.max_capacity - current_order.get_qty(), oven_)
+                         for current_order in CLIENT_ORDERS_LIST
+                         for oven_ in ovens_list
+                         if (oven_.max_capacity - current_order.get_qty()) >= 0]
+        list_of_ovens.sort(key=lambda x: x[0], reverse=True)
+        if len(list_of_ovens) > 0:
+            print("Oven(s) Found : ", len(list_of_ovens))
+        else:
+            raise ValueError("Ovens not found to serve this order. Make sure the orders are being "
+                             "created considering the maximum capacity of current ovens in used.")
+            return
 
-    # ###################### #
-    #   MANAGE ORDERS
-    # ###################### #
-    # CREATE LIST OF DIFFS OF CURRENT ORDER QTY AND OVEN MAX CAPACITY
-    list_of_ovens = [(oven_.max_capacity - current_order.get_qty(), oven_)
-                     for current_order in CLIENT_ORDERS_LIST
-                     for oven_ in ovens_list
-                     if (oven_.max_capacity - current_order.get_qty()) >= 0]
-    list_of_ovens.sort(key=lambda x: x[0], reverse=True)
-    if len(list_of_ovens) > 0:
-        print("Found at least %d Oven ", len(list_of_ovens))
-    else:
-        raise ValueError("Ovens not found to serve this order. Make sure the orders are being "
-                         "created taking into account "
-                         "the maximum capacity of current ovens in used.")
-        return
+        # ################################# #
+        # ITERATION OVER GLOBAL ORDERS LIST
+        # ################################# #
+        for i in range(len(CLIENT_ORDERS_LIST)):
+            current_order = CLIENT_ORDERS_LIST[i]
 
-    # ################################# #
-    # ITERATION OVER GLOBAL ORDERS LIST
-    # ################################# #
-    for i in range(len(CLIENT_ORDERS_LIST)):
-        current_order = CLIENT_ORDERS_LIST[i]
+            if current_order.is_created():
+                assert len(current_order.order_tasks_list) > 0, "Order created without tasks"
 
-        if current_order.is_created():
-            assert len(current_order.order_tasks_list) > 0, "Order created without tasks"
+            if current_order.is_processing():
+                print("Current order is already being processed")
+                continue
 
-        # ##################################### #
-        # ITERATION OVER TASKS OF A GIVEN ORDER
-        # ##################################### #
-        prod_line_to_use_in_task = None
-        for j in range(len(current_order.order_tasks_list)):
-            if j > 0:
-                prev_task = current_order.order_tasks_list[j-1]
+            # ##################################### #
+            # ITERATION OVER TASKS OF A GIVEN ORDER
+            # ##################################### #
+            prod_line_to_use_in_task = None
+            prod_line_assigned = False
+            prev_task = None
+            for j in range(len(current_order.order_tasks_list)):
+                if j > 0:
+                    prev_task = current_order.order_tasks_list[j-1]
 
-            current_task = current_order.order_tasks_list[j]
+                current_task = current_order.order_tasks_list[j]
 
-            if current_task.production_line is None and j == 0:  # only for the first task
-                print("Task without production line assigned ")
-                prod_line_assigned = False
+                if current_task.has_prod_line_assigned():
+                    print("Current Task is already assigned to a production line...")
 
-                # COMPARE OVEN MAX CAPACITY AND ORDER QTY
-                for _, oven_to_use in list_of_ovens:
-                    if not PRODUCTION_LINE_DICT[oven_to_use.production_line]:
-                        current_task.assign_prod_line(prod_line=oven_to_use.production_line)
-                        PRODUCTION_LINE_DICT[oven_to_use.production_line] = 1 # IN USE
-                        prod_line_to_use_in_task = oven_to_use.production_line
-                        print("ProdLine " + prod_line_to_use_in_task + " assigned to task " + str(current_task))
-                        prod_line_assigned = True
-                        break
-                    else:
-                        print("ProdLine %s is Busy", oven_to_use.production_line)
-            else:
-                current_task.assign_prod_line(prod_line=prod_line_to_use_in_task)
+                if j == 0:  # only for the first task
+                    if current_task.production_line is None:
+                        print("Task without production line assigned ")
 
-            # ###################### #
-            # ASSIGN WORKER TO TASK
-            # ###################### #
-            if j == 0:
-                # for the first tasks
-                if not current_task.is_assigned() and not current_task.is_finished():
-                    assign_worker_to_task(current_task)
+                        # COMPARE OVEN MAX CAPACITY AND ORDER QTY
+                        for _, oven_to_use in list_of_ovens:
+                            if not PRODUCTION_LINE_DICT[oven_to_use.production_line]:
+                                prod_line_to_use_in_task = oven_to_use.production_line
+                                PRODUCTION_LINE_DICT[oven_to_use.production_line] = 1  # IN USE
+                                prod_line_assigned = True
+                                break
 
-            else:
-                # for the rest of tasks
-                if prev_task.is_finished() and current_task.is_assigned() and not current_task.is_finished():
-                    assign_worker_to_task(current_task)
+                if prod_line_assigned:
+                    current_task.assign_prod_line(prod_line=prod_line_to_use_in_task)
+                    print("current task is assigned? ", current_task.has_prod_line_assigned())
+                    print("ProdLine " + prod_line_to_use_in_task + " assigned to task " + str(current_task))
 
-    time.sleep(3)
+                # ###################### #
+                # ASSIGN WORKER TO TASK
+                # ###################### #
+                if prev_task is not None:
+                    if not prev_task.is_finished():
+                        print("The previous task must be finished to perform this one: " + str(current_task))
+                else:
+                    if not current_task.has_worker_assigned() and not current_task.is_finished():
+                        assign_worker_to_task(current_task)
+                        print("worker assigned? " + str(current_task.has_worker_assigned()))
+
+        print("Current values of ProdLine dict")
+        print(*PRODUCTION_LINE_DICT.items(), sep="\n")
+
+
+        time.sleep(5)
 
 
 def assign_worker_to_task(task):
     worker_assigned = False
+    print("Task " + str(task) + " Type: " + str(task.__class__.__name__))
     for worker_ in WORKERS_LIST:
-        print("Task " + str(task) + " Type: " + str(task.__class__))
-        if worker_.is_capable_of(task.__class__) and not worker_.is_busy():
+        if worker_.is_capable_of(task.__class__.__name__) and not worker_.is_busy():
             task.assign_worker(worker=worker_)
             print("Worker assigned to task ...")
             return
     if not task.is_assigned():
-        print("All worker are busy.")
+        print("All workers are busy.")
 
 
 def look_new_order():
@@ -171,15 +183,23 @@ def look_new_order():
         orders = configparser.ConfigParser()
         orders.optionxform = str
         orders.read(new_order_file)
+
         order = orders['ORDER']
+        # check qty of order and compare with MaxCapacity of each Oven available
+        order_id = order.get('OrderId')
+        # check if order is already being received
+        print("Order ID: " + order_id)
+        if order_id in ORDERS_ID:
+            continue
+        else:
+            print("A new different order received... OrderID: " + order_id)
+
         print("# ##################### #")
         print("Current order received: \n [" + new_order_file + "]\n")
         print("(KEY : VALUE )")
         print(*order.items(), sep="\n")
         print("# ##################### #")
 
-        # check qty of order and compare with MaxCapacity of each Oven available
-        order_qty = order.get('Qty')
         configs = {}
         for config in CONFIGS:
             configs[config] = order.get(config)
@@ -188,7 +208,8 @@ def look_new_order():
         new_order.set_created_state()
         new_order.create_list_of_tasks()
         CLIENT_ORDERS_LIST.append(new_order)
-        print("adding a new order...")
+        ORDERS_ID.append(order_id)
+        print("Adding a new order...")
         new_order.print_description()
 
 
